@@ -1,8 +1,8 @@
 import { Pinecone } from "@pinecone-database/pinecone";
 
-const SYSTEM_PROMPT = `You are a Medium-article assistant that answers questions strictly and only based on the Medium articles dataset context provided to you (metadata and article passages). You must not use any external knowledge, the open internet, or information that is not explicitly contained in the retrieved context. If the answer cannot be determined from the provided context, respond: "I don't know based on the provided Medium articles data." Always explain your answer using the given context, quoting or paraphrasing the relevant article passage or metadata when helpful.`;
-
-const TOP_K = 7;
+const SYSTEM_PROMPT = `You are a Medium-article assistant that answers questions strictly and only based on the Medium articles dataset context provided to you (metadata and article passages). You must not use any external knowledge, the open internet, or information that is not explicitly contained in the retrieved context. If the answer cannot be determined from the provided context, respond: "I don't know based on the provided Medium articles data." Always explain your answer using the given context, quoting or paraphrasing the relevant article passage or metadata when helpful. If the user asks for a specific output format, such as "return only the titles", "list exactly 3", or "return only...", you must follow that format exactly and must not add explanations or extra text.`;
+const TOP_K = 20;
+const MAX_CONTEXT_ITEMS = 7;
 
 async function embedText(text) {
   const response = await fetch(`${process.env.LLMOD_BASE_URL}/v1/embeddings`, {
@@ -52,14 +52,25 @@ export async function POST(request) {
     includeMetadata: true,
   });
 
-  const context = (searchResults.matches || []).map((match) => ({
-    article_id: match.metadata?.article_id || "",
-    title: match.metadata?.title || "",
-    authors: match.metadata?.authors || "",
-    url: match.metadata?.url || "",
-    chunk: match.metadata?.chunk || "",
-    score: match.score || 0,
-  }));
+  const uniqueArticles = new Map();
+
+for (const match of searchResults.matches || []) {
+  const articleId = match.metadata?.article_id || "";
+
+  if (!uniqueArticles.has(articleId)) {
+    uniqueArticles.set(articleId, {
+      article_id: articleId,
+      title: match.metadata?.title || "",
+      authors: match.metadata?.authors || "",
+      url: match.metadata?.url || "",
+      chunk: match.metadata?.chunk || "",
+      score: match.score || 0,
+    });
+  }
+}
+
+const context = Array.from(uniqueArticles.values()).slice(0, MAX_CONTEXT_ITEMS);
+
 
   const contextText = context
     .map((item, i) => {

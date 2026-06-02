@@ -10,7 +10,7 @@ const CSV_PATH = path.resolve("../rag_backup/medium-english-50mb.csv");
 
 const CHUNK_SIZE_CHARS = 2000;
 const OVERLAP_CHARS = 400;
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 25;
 
 const startArticle = Number(process.argv[2]);
 const numArticles = Number(process.argv[3]);
@@ -66,37 +66,70 @@ function chunkText(text) {
   return chunks;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function embedText(text) {
-  const response = await fetch(`${process.env.LLMOD_BASE_URL}/v1/embeddings`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.LLMOD_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "4UHRUIN-text-embedding-3-small",
-      input: text,
-    }),
-  });
+  const maxRetries = 5;
 
-  const data = await response.json();
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(`${process.env.LLMOD_BASE_URL}/v1/embeddings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${process.env.LLMOD_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "4UHRUIN-text-embedding-3-small",
+          input: text,
+        }),
+      });
 
-  if (!response.ok) {
-    console.error("Embedding request failed:", data);
-    throw new Error("Embedding request failed");
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("Embedding request failed:", data);
+        throw new Error("Embedding request failed");
+      }
+
+      return data.data[0].embedding;
+    } catch (error) {
+      console.error(`Embedding attempt ${attempt}/${maxRetries} failed.`);
+
+      if (attempt === maxRetries) {
+        throw error;
+      }
+
+      await sleep(3000 * attempt);
+    }
   }
-
-  return data.data[0].embedding;
 }
 
 async function upsertBatch(index, vectors, batchNumber) {
   if (vectors.length === 0) return;
 
-  await index.upsert({
-    records: vectors,
-  });
+  const maxRetries = 5;
 
-  console.log(`Upserted batch ${batchNumber} with ${vectors.length} vectors`);
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await index.upsert({
+        records: vectors,
+      });
+
+      console.log(`Upserted batch ${batchNumber} with ${vectors.length} vectors`);
+      return;
+    } catch (error) {
+      console.error(`Pinecone upsert attempt ${attempt}/${maxRetries} failed.`);
+
+      if (attempt === maxRetries) {
+        throw error;
+      }
+
+      await sleep(3000 * attempt);
+    }
+  }
 }
 
 async function main() {

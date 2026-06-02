@@ -10,7 +10,8 @@ const CSV_PATH = path.resolve("../rag_backup/medium-english-50mb.csv");
 
 const CHUNK_SIZE_CHARS = 2000;
 const OVERLAP_CHARS = 400;
-const MAX_ARTICLES = 3;
+const START_ARTICLE = 3;
+const NUM_ARTICLES = 97;
 
 if (!process.env.LLMOD_API_KEY) {
   console.error("Missing LLMOD_API_KEY in .env.local");
@@ -86,8 +87,8 @@ async function main() {
     skip_empty_lines: true,
   });
 
-  const selectedArticles = records.slice(0, MAX_ARTICLES);
-  console.log(`Loaded ${records.length} articles. Using first ${selectedArticles.length}.`);
+  const selectedArticles = records.slice(START_ARTICLE, START_ARTICLE + NUM_ARTICLES);
+  console.log(`Loaded ${records.length} articles. Using articles ${START_ARTICLE} to ${START_ARTICLE + NUM_ARTICLES - 1}.`);
 
   const pinecone = new Pinecone({
     apiKey: process.env.PINECONE_API_KEY,
@@ -100,7 +101,7 @@ async function main() {
   for (let articleIndex = 0; articleIndex < selectedArticles.length; articleIndex++) {
     const article = selectedArticles[articleIndex];
 
-    const articleId = String(articleIndex);
+    const articleId = String(START_ARTICLE + articleIndex);
     const title = article.title || "";
     const authors = article.authors || "";
     const url = article.url || "";
@@ -136,11 +137,19 @@ async function main() {
 
   console.log(`Upserting ${vectors.length} vectors to Pinecone...`);
 
-  await index.upsert({
-  records: vectors,
-});
+const BATCH_SIZE = 50;
 
-  console.log("Done. Vectors inserted into Pinecone.");
+for (let i = 0; i < vectors.length; i += BATCH_SIZE) {
+  const batch = vectors.slice(i, i + BATCH_SIZE);
+
+  await index.upsert({
+    records: batch,
+  });
+
+  console.log(`Upserted batch ${Math.floor(i / BATCH_SIZE) + 1} with ${batch.length} vectors`);
+}
+
+console.log("Done. Vectors inserted into Pinecone.");
 }
 
 main().catch((error) => {

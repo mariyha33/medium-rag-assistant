@@ -47,19 +47,29 @@ if (!process.env.PINECONE_INDEX_NAME) {
   process.exit(1);
 }
 
+// Removes invalid Unicode surrogate characters that can break the embedding API.
+// This does not change the original CSV file.
+function cleanText(value) {
+  return String(value || "")
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, "")
+    .replace(/(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "$1")
+    .replace(/\u0000/g, "");
+}
+
 function chunkText(text) {
+  const cleanedText = cleanText(text);
   const chunks = [];
   let start = 0;
 
-  while (start < text.length) {
-    const end = Math.min(start + CHUNK_SIZE_CHARS, text.length);
-    const chunk = text.slice(start, end).trim();
+  while (start < cleanedText.length) {
+    const end = Math.min(start + CHUNK_SIZE_CHARS, cleanedText.length);
+    const chunk = cleanedText.slice(start, end).trim();
 
     if (chunk.length > 0) {
       chunks.push(chunk);
     }
 
-    if (end === text.length) break;
+    if (end === cleanedText.length) break;
     start = end - OVERLAP_CHARS;
   }
 
@@ -72,6 +82,7 @@ function sleep(ms) {
 
 async function embedText(text) {
   const maxRetries = 5;
+  const safeText = cleanText(text);
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -83,7 +94,7 @@ async function embedText(text) {
         },
         body: JSON.stringify({
           model: "4UHRUIN-text-embedding-3-small",
-          input: text,
+          input: safeText,
         }),
       });
 
@@ -166,12 +177,12 @@ async function main() {
     const originalArticleIndex = startArticle + articleIndex;
 
     const articleId = String(originalArticleIndex);
-    const title = article.title || "";
-    const authors = article.authors || "";
-    const url = article.url || "";
-    const timestamp = article.timestamp || "";
-    const tags = article.tags || "";
-    const text = article.text || "";
+    const title = cleanText(article.title);
+    const authors = cleanText(article.authors);
+    const url = cleanText(article.url);
+    const timestamp = cleanText(article.timestamp);
+    const tags = cleanText(article.tags);
+    const text = cleanText(article.text);
 
     const chunks = chunkText(text);
 
@@ -181,7 +192,7 @@ async function main() {
     );
 
     for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
-      const chunk = chunks[chunkIndex];
+      const chunk = cleanText(chunks[chunkIndex]);
       const embedding = await embedText(chunk);
 
       batch.push({

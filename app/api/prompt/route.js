@@ -16,6 +16,8 @@ const SYSTEM_PROMPT = [
   "",
   "When answering, use only the retrieved context chunks and metadata.",
   "",
+  "Always explain your answer using the given context, quoting or paraphrasing the relevant article passage or metadata when helpful.",
+  "",
   "If the user asks for a specific output format, such as 'return only the titles', 'list exactly 3', or 'return only...', follow that format exactly and do not add extra text.",
   "",
   "For recommendation questions, recommend one article only and justify the recommendation using evidence from the retrieved context."
@@ -169,9 +171,16 @@ Answer the question using only the retrieved context above.
       ? UNKNOWN_RESPONSE
       : modelResponse;
 
+    const responseContext = context.map((item) => ({
+      article_id: item.article_id,
+      title: item.title,
+      chunk: item.chunk,
+      score: item.score,
+    }));
+
     return Response.json({
       response: finalResponse,
-      context,
+      context: responseContext,
       Augmented_prompt: {
         System: SYSTEM_PROMPT,
         User: userPrompt,

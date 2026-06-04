@@ -8,6 +8,8 @@ dotenv.config({ path: ".env.local" });
 
 const CSV_PATH = path.resolve("../rag_backup/medium-english-50mb.csv");
 
+// We chunk by characters for simplicity
+// 2000 characters is approximately 500 tokens, which is below the assignment limit of 1024 tokens
 const CHUNK_SIZE_CHARS = 2000;
 const OVERLAP_CHARS = 400;
 const BATCH_SIZE = 25;

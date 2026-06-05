@@ -19,6 +19,7 @@ const SYSTEM_PROMPT = [
   "Always explain your answer using the given context, quoting or paraphrasing the relevant article passage or metadata when helpful.",
   "",
   "For topic-listing questions, such as 'List exactly 3 articles about education', use the retrieved article titles and metadata to return distinct article titles related to the requested topic. If at least the requested number of distinct relevant article titles appear in the retrieved context, return exactly that number of titles and do not answer unknown.",
+  "",
   "If the user asks for a specific output format, such as 'return only the titles', 'list exactly 3', or 'return only...', follow that format exactly and do not add extra text.",
   "",
   "For recommendation questions, recommend one article only and justify the recommendation using evidence from the retrieved context."
@@ -58,7 +59,7 @@ async function fetchJsonWithRetry(fetchFunction, label, maxAttempts = 3) {
   throw lastError;
 }
 
-function buildRetrievalQuery(question) {
+function getListingTopic(question) {
   const topicMatch = question.match(/about\s+(.+?)(?:\.|,|\?|$)/i);
 
   if (
@@ -66,25 +67,103 @@ function buildRetrievalQuery(question) {
     question.toLowerCase().includes("list") &&
     question.toLowerCase().includes("article")
   ) {
-    const topic = topicMatch[1].trim().toLowerCase();
+    return topicMatch[1].trim().toLowerCase();
+  }
 
+  return null;
+}
+
+function buildRetrievalQuery(question) {
+  const topic = getListingTopic(question);
+
+  if (topic) {
     const topicExpansions = {
       education:
-        "education school schools university universities students teaching teachers learning classroom college graduate academic",
+        "education school schools university universities student students teacher teachers teaching learning classroom college graduate academic campus degree curriculum",
       writing:
-        "writing writers author authors essay blogging blog headline publishing articles",
+        "writing writer writers author authors essay blog blogging headline publishing articles readers",
       habits:
-        "habits habit behavior routine consistency self improvement productivity"
+        "habits habit behavior routine consistency self improvement productivity atomic habits"
     };
 
-    const expandedTopic = topicExpansions[topic] || topic;
-
-    return `${topic} ${expandedTopic} Medium article titles tags text`;
+    return topicExpansions[topic] || topic;
   }
 
   return question;
 }
 
+function countKeywordHits(text, keywords) {
+  let hits = 0;
+
+  for (const keyword of keywords) {
+    if (text.includes(keyword)) {
+      hits += 1;
+    }
+  }
+
+  return hits;
+}
+
+function topicRelevanceScore(item, topic) {
+  const titleText = String(item.title || "").toLowerCase();
+  const chunkText = String(item.chunk || "").toLowerCase();
+  const tagsText = String(item.tags || "").toLowerCase();
+
+  const topicKeywords = {
+    education: [
+      "education",
+      "school",
+      "schools",
+      "university",
+      "universities",
+      "student",
+      "students",
+      "teacher",
+      "teachers",
+      "teaching",
+      "learning",
+      "classroom",
+      "college",
+      "graduate",
+      "academic",
+      "campus",
+      "degree",
+      "curriculum"
+    ],
+    writing: [
+      "writing",
+      "writer",
+      "writers",
+      "author",
+      "authors",
+      "essay",
+      "blog",
+      "blogging",
+      "headline",
+      "publishing",
+      "articles",
+      "readers"
+    ],
+    habits: [
+      "habit",
+      "habits",
+      "routine",
+      "behavior",
+      "consistency",
+      "self improvement",
+      "productivity",
+      "atomic habits"
+    ]
+  };
+
+  const keywords = topicKeywords[topic] || [topic];
+
+  const titleHits = countKeywordHits(titleText, keywords);
+  const tagsHits = countKeywordHits(tagsText, keywords);
+  const chunkHits = countKeywordHits(chunkText, keywords);
+
+  return titleHits * 5 + tagsHits * 3 + chunkHits;
+}
 
 async function embedText(text) {
   const data = await fetchJsonWithRetry(
@@ -144,13 +223,38 @@ export async function POST(request) {
           title: match.metadata?.title || "",
           authors: match.metadata?.authors || "",
           url: match.metadata?.url || "",
+          tags: match.metadata?.tags || "",
           chunk: match.metadata?.chunk || "",
           score: match.score || 0,
         });
       }
     }
 
-    const context = Array.from(uniqueArticles.values()).slice(0, MAX_CONTEXT_ITEMS);
+    let context = Array.from(uniqueArticles.values());
+
+    const listingTopic = getListingTopic(question);
+
+    if (listingTopic) {
+      const rerankedContext = context
+        .map((item) => ({
+          ...item,
+          topic_score: topicRelevanceScore(item, listingTopic),
+        }))
+        .filter((item) => item.topic_score > 0)
+        .sort((a, b) => {
+          if (b.topic_score !== a.topic_score) {
+            return b.topic_score - a.topic_score;
+          }
+
+          return b.score - a.score;
+        });
+
+      if (rerankedContext.length >= 3) {
+        context = rerankedContext;
+      }
+    }
+
+    context = context.slice(0, MAX_CONTEXT_ITEMS);
 
     const contextText = context
       .map((item, i) => {
@@ -159,15 +263,22 @@ Article ID: ${item.article_id}
 Title: ${item.title}
 Authors: ${item.authors}
 URL: ${item.url}
+Tags: ${item.tags}
 Score: ${item.score}
 Passage:
 ${item.chunk}`;
       })
       .join("\n\n---\n\n");
 
+    const listingInstruction = listingTopic
+      ? `This is a topic-listing question about "${listingTopic}". Use the retrieved context to choose distinct article titles that are clearly related to this topic. If the user asked to return only the titles, do not add explanations or numbering unless necessary.`
+      : "";
+
     const userPrompt = `
 Question:
 ${question}
+
+${listingInstruction}
 
 Retrieved Medium articles context:
 ${contextText || "No relevant context was retrieved."}

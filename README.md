@@ -66,7 +66,7 @@ Output:
 - Chunk size: 2000 characters, approximately 500 tokens
 - Overlap: 400 characters, approximately 20%
 - Top-k retrieval: 30
-- Final context items sent to the model: up to 8 distinct articles
+- Final context items sent to the model: up to 8 distinct retrieved articles
 - Vector database: Pinecone
 - Deployment platform: Vercel
 

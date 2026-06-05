@@ -2,8 +2,8 @@ import { Pinecone } from "@pinecone-database/pinecone";
 
 const UNKNOWN_RESPONSE = "I don't know based on the provided Medium articles data.";
 
-const TOP_K = 20;
-const MAX_CONTEXT_ITEMS = 5;
+const TOP_K = 30;
+const MAX_CONTEXT_ITEMS = 8;
 
 const SYSTEM_PROMPT = [
   "You are a Medium-article assistant that answers questions strictly and only based on the Medium articles dataset context provided to you.",
@@ -18,6 +18,7 @@ const SYSTEM_PROMPT = [
   "",
   "Always explain your answer using the given context, quoting or paraphrasing the relevant article passage or metadata when helpful.",
   "",
+  "For topic-listing questions, such as 'List exactly 3 articles about education', use the retrieved article titles and metadata to return distinct article titles related to the requested topic. If at least the requested number of distinct relevant article titles appear in the retrieved context, return exactly that number of titles and do not answer unknown.",
   "If the user asks for a specific output format, such as 'return only the titles', 'list exactly 3', or 'return only...', follow that format exactly and do not add extra text.",
   "",
   "For recommendation questions, recommend one article only and justify the recommendation using evidence from the retrieved context."

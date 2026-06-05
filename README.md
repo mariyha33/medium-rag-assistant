@@ -1,36 +1,84 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Medium RAG Assistant
 
-## Getting Started
+This project implements a Retrieval-Augmented Generation (RAG) assistant for Medium articles.
 
-First, run the development server:
+The assistant answers questions only based on the retrieved Medium article context from the provided dataset. It does not rely on external knowledge.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Live Deployment
+
+Live URL:
+
+https://medium-rag-assistant-rose.vercel.app
+
+GitHub URL:
+
+https://github.com/mariyha33/medium-rag-assistant
+
+## API Endpoints
+
+### POST `/api/prompt`
+
+Used to query the RAG assistant.
+
+Input:
+
+```json
+{
+  "question": "Your question here"
+}
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Output:
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+```json
+{
+  "response": "Final natural language answer from the model.",
+  "context": [
+    {
+      "article_id": "1234",
+      "title": "Sample article title",
+      "chunk": "Retrieved article chunk",
+      "score": 0.1234
+    }
+  ],
+  "Augmented_prompt": {
+    "System": "The system prompt used to query the chat model",
+    "User": "The user prompt used to query the chat model"
+  }
+}
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### GET `/api/stats`
 
-## Learn More
+Returns the current RAG configuration.
 
-To learn more about Next.js, take a look at the following resources:
+Output:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```json
+{
+  "chunk_size": 500,
+  "overlap_ratio": 0.2,
+  "top_k": 30
+}
+```
+## RAG Configuration
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Chunk size: 2000 characters, approximately 500 tokens
+- Overlap: 400 characters, approximately 20%
+- Top-k retrieval: 30
+- Final context items sent to the model: up to 8 distinct articles
+- Vector database: Pinecone
+- Deployment platform: Vercel
 
-## Deploy on Vercel
+We retrieve `top_k=30` candidate chunks from Pinecone, deduplicate the results by `article_id`, rerank the retrieved articles when needed for topic-listing questions, and pass up to 8 distinct articles to the model. This helps reduce noise and cost while keeping enough relevant context for the required question types.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Models
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Embeddings model: `4UHRUIN-text-embedding-3-small`
+- Chat model: `4UHRUIN-gpt-5-mini`
+
+## Notes
+
+- The Pinecone index should remain active until grading is complete.
+- API keys and environment variables are not included in this repository.
+- The app uses environment variables for LLMod and Pinecone credentials.

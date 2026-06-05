@@ -58,16 +58,122 @@ async function fetchJsonWithRetry(fetchFunction, label, maxAttempts = 3) {
 
   throw lastError;
 }
+function normalizeListingTopic(text) {
+  const topic = text.trim().toLowerCase();
 
-function getListingTopic(question) {
-  const topicMatch = question.match(/about\s+(.+?)(?:\.|,|\?|$)/i);
+  // Avoid confusing AI-related learning topics with education.
+  if (topic.includes("machine learning")) return "machine learning";
+  if (topic.includes("deep learning")) return "deep learning";
+  if (topic.includes("reinforcement learning")) return "reinforcement learning";
+
+  if (topic.includes("habit") || topic.includes("routine")) {
+    return "habits";
+  }
 
   if (
-    topicMatch &&
-    question.toLowerCase().includes("list") &&
-    question.toLowerCase().includes("article")
+    topic.includes("writing") ||
+    topic.includes("writer") ||
+    topic.includes("author") ||
+    topic.includes("blogging")
   ) {
-    return topicMatch[1].trim().toLowerCase();
+    return "writing";
+  }
+
+  if (
+    topic.includes("education") ||
+    topic.includes("school") ||
+    topic.includes("university") ||
+    topic.includes("student") ||
+    topic.includes("teaching") ||
+    topic.includes("teacher") ||
+    topic.includes("classroom") ||
+    topic.includes("college") ||
+    topic.includes("graduate") ||
+    topic.includes("academic") ||
+    topic.includes("learning")
+  ) {
+    return "education";
+  }
+
+  return topic;
+}
+
+function getListingTopic(question) {
+  const lower = question.toLowerCase();
+
+  const isListingQuestion =
+    /\b(list|show|give|return)\b/.test(lower) &&
+    /\b(article|articles|title|titles)\b/.test(lower);
+
+  if (!isListingQuestion) {
+    return null;
+  }
+
+
+  const aboutMatch = question.match(
+    /\b(?:about|on|related to|regarding)\s+(.+?)(?:\.|,|\?|$|\s+return only|\s+only titles|\s+titles?\b)/i
+  );
+
+  if (aboutMatch) {
+    return normalizeListingTopic(aboutMatch[1]);
+  }
+
+  // Example: "List exactly 3 education articles"
+  // Example: "Give me 3 education articles"
+  const beforeArticlesMatch = question.match(
+    /\b(?:list|show|give|return)\s+(?:me\s+|us\s+)?(?:exactly\s+)?(?:up to\s+)?(?:\d+\s+)?(.+?)\s+(?:article|articles|title|titles)\b/i
+  );
+
+  if (beforeArticlesMatch) {
+    const topic = beforeArticlesMatch[1]
+      .replace(/\b(distinct|different|relevant|related)\b/g, "")
+      .trim();
+
+    if (topic) {
+      return normalizeListingTopic(topic);
+    }
+  }
+
+  // Fallback for common assignment topics.
+  if (lower.includes("machine learning")) {
+    return "machine learning";
+  }
+
+  if (lower.includes("deep learning")) {
+    return "deep learning";
+  }
+
+  if (lower.includes("reinforcement learning")) {
+    return "reinforcement learning";
+  }
+
+  if (lower.includes("habit") || lower.includes("routine")) {
+    return "habits";
+  }
+
+  if (
+    lower.includes("writing") ||
+    lower.includes("writer") ||
+    lower.includes("author") ||
+    lower.includes("blogging")
+  ) {
+    return "writing";
+  }
+
+  if (
+    lower.includes("education") ||
+    lower.includes("school") ||
+    lower.includes("university") ||
+    lower.includes("student") ||
+    lower.includes("teaching") ||
+    lower.includes("teacher") ||
+    lower.includes("classroom") ||
+    lower.includes("college") ||
+    lower.includes("graduate") ||
+    lower.includes("academic") ||
+    lower.includes("learning")
+  ) {
+    return "education";
   }
 
   return null;

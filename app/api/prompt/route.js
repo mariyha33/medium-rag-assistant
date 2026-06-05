@@ -58,6 +58,34 @@ async function fetchJsonWithRetry(fetchFunction, label, maxAttempts = 3) {
   throw lastError;
 }
 
+function buildRetrievalQuery(question) {
+  const topicMatch = question.match(/about\s+(.+?)(?:\.|,|\?|$)/i);
+
+  if (
+    topicMatch &&
+    question.toLowerCase().includes("list") &&
+    question.toLowerCase().includes("article")
+  ) {
+    const topic = topicMatch[1].trim().toLowerCase();
+
+    const topicExpansions = {
+      education:
+        "education school schools university universities students teaching teachers learning classroom college graduate academic",
+      writing:
+        "writing writers author authors essay blogging blog headline publishing articles",
+      habits:
+        "habits habit behavior routine consistency self improvement productivity"
+    };
+
+    const expandedTopic = topicExpansions[topic] || topic;
+
+    return `${topic} ${expandedTopic} Medium article titles tags text`;
+  }
+
+  return question;
+}
+
+
 async function embedText(text) {
   const data = await fetchJsonWithRetry(
     () =>
@@ -90,7 +118,8 @@ export async function POST(request) {
       );
     }
 
-    const questionEmbedding = await embedText(question);
+    const retrievalQuery = buildRetrievalQuery(question);
+    const questionEmbedding = await embedText(retrievalQuery);
 
     const pinecone = new Pinecone({
       apiKey: process.env.PINECONE_API_KEY,
